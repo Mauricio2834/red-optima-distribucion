@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RouteIQ · Optimizador Logístico</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:         #f5f4f0;
+      --surface:    #ffffff;
+      --surface2:   #f0efe9;
+      --border:     #e0ddd5;
+      --border2:    #ccc9be;
+      --text:       #1a1916;
+      --text2:      #5a5850;
+      --muted:      #9a9688;
+      --accent:     #1a1916;
+      --green:      #1a8a4a;
+      --green-bg:   #e8f5ee;
+      --green-b:    #a8d8bc;
+      --cA:         #1a55d4;
+      --cB:         #c0392b;
+      --cC:         #d4660a;
+      --gold:       #e8a500;
+      --gold-bg:    #fff8e6;
+      --font-head:  'Clash Display', sans-serif;
+      --font-mono:  'JetBrains Mono', monospace;
+      --r:          8px;
+      --shadow:     0 4px 16px rgba(0,0,0,.10);
+      --shadow-lg:  0 8px 32px rgba(0,0,0,.14);
+      --transition: .2s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--text);
+      color: #f5f4f0;
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .logo {
+      font-family: var(--font-head);
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -.3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+    .logo-tag {
+      font-family: var(--font-mono);
+      font-size: .58rem;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: #9a9688;
+      border: 1px solid #3a3836;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .header-version { font-size: .62rem; color: #6a6864; letter-spacing: 1.5px; text-transform: uppercase; }
+
+    /* ── LAYOUT ── */
+    main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── PANEL ── */
+    .panel {
+      width: 360px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-block { padding: 20px; border-bottom: 1px solid var(--border); }
+    .panel-block:last-child { border-bottom: none; }
+
+    .block-title {
+      font-family: var(--font-head);
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .block-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── FIELDS ── */
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: .65rem;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text2);
+      margin-bottom: 5px;
+    }
+    .field-row { display: flex; align-items: center; gap: 8px; }
+    .color-pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Dos inputs de coordenadas lado a lado */
+    .coord-row { display: flex; gap: 6px; }
+    .coord-row input { width: 50%; }
+
+    input[type="text"], input[type="text"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: .75rem;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    input[type="text"]:focus, input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(26,25,22,.08);
+    }
+    input::placeholder { color: var(--muted); font-size: .72rem; }
+
+    /* hint bajo el campo */
+    .field-hint {
+      font-size: .6rem;
+      color: var(--muted);
+      margin-top: 4px;
+      letter-spacing: .5px;
+    }
+
+    /* ── BUTTON ── */
+    .btn-primary {
+      width: 100%;
+      background: var(--text);
+      color: #f5f4f0;
+      border: none;
+      border-radius: var(--r);
+      font-family: var(--font-head);
+      font-weight: 600;
+      font-size: .8rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 13px;
+      cursor: pointer;
+      transition: background var(--transition), transform .1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:hover:not(:disabled) { background: #333; }
+    .btn-primary:active:not(:disabled) { transform: scale(.98); }
+    .btn-primary:disabled { background: var(--border2); color: var(--muted); cursor: not-allowed; }
+
+    .spinner-sm {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+    }
+    .btn-primary.loading .spinner-sm { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── RESULTS TABLE ── */
+    .results-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+    .results-table th {
+      font-size: .58rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 6px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .results-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table tr.best { background: var(--gold-bg); }
+
+    .prov-badge { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: .7rem; }
+    .prov-pip { width: 8px; height: 8px; border-radius: 50%; }
+    .rank-medal { font-size: .9rem; margin-right: 2px; }
+
+    /* ── REC BOX ── */
+    .rec-box {
+      background: var(--green-bg);
+      border: 1.5px solid var(--green-b);
+      border-radius: var(--r);
+      padding: 14px 16px;
+    }
+    .rec-box-title {
+      font-family: var(--font-head);
+      font-weight: 700;
+      font-size: .85rem;
+      color: var(--green);
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rec-box-body { font-size: .7rem; color: var(--text2); line-height: 1.6; }
+    .rec-box-body strong { color: var(--text); }
+
+    /* ── LOG ── */
+    .status-line {
+      font-size: .65rem;
+      padding: 4px 0;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-line.ok   { color: var(--green); }
+    .status-line.err  { color: var(--cB); }
+    .status-line.info { color: var(--cA); }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+    #logBox {
+      max-height: 100px;
+      overflow-y: auto;
+      background: var(--bg);
+      border-radius: var(--r);
+      padding: 8px 12px;
+    }
+    #logBox::-webkit-scrollbar { width: 4px; }
+    #logBox::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+    /* ── MAP ── */
+    #mapWrap { flex: 1; position: relative; min-height: 300px; }
+    #map { width: 100%; height: 100%; min-height: 400px; }
+
+    .map-legend {
+      position: absolute;
+      top: 12px; left: 12px;
+      z-index: 800;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      font-size: .65rem;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .map-legend.visible { display: block; }
+    .legend-row { display: flex; align-items: center; gap: 7px; padding: 3px 0; color: var(--text2); }
+    .legend-line { width: 20px; height: 3px; border-radius: 99px; }
+    .legend-circle { width: 10px; height: 10px; border-radius: 50%; }
+
+    /* ── POPUP ── */
+    .leaflet-popup-content-wrapper {
+      background: var(--text) !important;
+      color: #f5f4f0 !important;
+      border-radius: var(--r) !important;
+      box-shadow: var(--shadow-lg) !important;
+      font-family: var(--font-mono) !important;
+      padding: 0 !important;
+    }
+    .leaflet-popup-content { margin: 0 !important; }
+    .leaflet-popup-tip { background: var(--text) !important; }
+    .popup-inner { padding: 14px 16px; }
+    .popup-name {
+      font-family: var(--font-head);
+      font-size: .9rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #3a3836;
+      padding-bottom: 6px;
+    }
+    .popup-row { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; font-size: .68rem; }
+    .popup-row .k { color: #9a9688; }
+    .popup-row .v { color: #f5f4f0; font-weight: 500; }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 700;
+      background: rgba(245,244,240,.7);
+      backdrop-filter: blur(2px);
+      transition: opacity var(--transition);
+    }
+    .empty-state.hidden { opacity: 0; pointer-events: none; }
+    .empty-icon { font-size: 2.5rem; opacity: .4; }
+    .empty-text { font-size: .72rem; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+
+    .validated { border-color: var(--green) !important; }
+    .invalid   { border-color: var(--cB) !important; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      main { flex-direction: column; overflow: visible; }
+      .panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
+      #mapWrap { height: 50vh; min-height: 280px; }
+      header { padding: 0 14px; }
+      .header-version { display: none; }
+    }
+    @media (min-width: 769px) {
+      main { overflow: hidden; height: calc(100vh - 52px); }
+      .panel { height: 100%; }
+      #mapWrap { height: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      RouteIQ
+      <span class="logo-tag">Logística</span>
+    </div>
+    <div class="header-version">v4.0 · Geocodificación</div>
+  </header>
+
+  <main>
+    <aside class="panel">
+
+      <!-- Coordenadas -->
+      <div class="panel-block">
+        <div class="block-title">Coordenadas</div>
+
+        <!-- Destino -->
+        <div class="field">
+          <label>🏪 Destino (droguería / cliente)</label>
+          <div class="coord-row">
+            <input type="text" id="latDest" placeholder="Dirección  ej: Calle 100 #7-33" step="any" />
+            <input type="text" id="lonDest" placeholder="(vacío si usas dirección)" step="any" />
+          </div>
+          <div class="field-hint">Escribe dirección en Bogotá  o  lat / lon (punto decimal)</div>
+        </div>
+
+        <!-- Proveedor A -->
+        <div class="field">
+          <label><span style="color:var(--cA)">▲</span> Proveedor A</label>
+          <div class="field-row">
+            <div class="color-pip" style="background:var(--cA)"></div>
+            <div class="coord-row" style="flex:1">
+              <input type="text" id="latA" placeholder="Dirección o latitud" step="any" />
+              <input type="text" id="lonA" placeholder="(vacío si usas dirección)" step="any" />
+            </div>
+          </div>
+          <div class="field-hint" style="margin-left:18px">Dirección en Bogotá  o  lat / lon</div>
+        </div>
+
+        <!-- Proveedor B -->
+        <div class="field">
+          <label><span style="color:var(--cB)">▲</span> Proveedor B</label>
+          <div class="field-row">
+            <div class="color-pip" style="background:var(--cB)"></div>
+            <div class="coord-row" style="flex:1">
+              <input type="text" id="latB" placeholder="Dirección o latitud" step="any" />
+              <input type="text" id="lonB" placeholder="(vacío si usas dirección)" step="any" />
+            </div>
+          </div>
+          <div class="field-hint" style="margin-left:18px">Dirección en Bogotá  o  lat / lon</div>
+        </div>
+
+        <!-- Proveedor C -->
+        <div class="field">
+          <label><span style="color:var(--cC)">▲</span> Proveedor C</label>
+          <div class="field-row">
+            <div class="color-pip" style="background:var(--cC)"></div>
+            <div class="coord-row" style="flex:1">
+              <input type="text" id="latC" placeholder="Dirección o latitud" step="any" />
+              <input type="text" id="lonC" placeholder="(vacío si usas dirección)" step="any" />
+            </div>
+          </div>
+          <div class="field-hint" style="margin-left:18px">Dirección en Bogotá  o  lat / lon</div>
+        </div>
+
+        <div class="field" style="margin-top:16px">
+          <button class="btn-primary" id="btnCalc" onclick="calcularRutas()">
+            <div class="spinner-sm" id="btnSpinner"></div>
+            <span id="btnLabel">Calcular rutas</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Resultados -->
+      <div class="panel-block" id="resultsBlock" style="display:none">
+        <div class="block-title">Comparativa</div>
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Proveedor</th><th>Tiempo</th><th>Distancia</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+        <div class="rec-box" id="recBox" style="margin-top:14px"></div>
+      </div>
+
+      <!-- Log -->
+      <div class="panel-block">
+        <div class="block-title">Registro</div>
+        <div id="logBox">
+          <div class="status-line info">
+            <div class="status-dot"></div>
+            Sistema listo. Ingresa las coordenadas y haz clic en Calcular rutas.
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <div id="mapWrap">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🗺️</div>
+        <div class="empty-text">El mapa aparecerá aquí</div>
+      </div>
+
+      <div class="map-legend" id="mapLegend">
+        <div class="legend-row"><div class="legend-circle" style="background:#1a8a4a"></div>Destino</div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--cA)"></div>Proveedor A</div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--cB)"></div>Proveedor B</div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--cC)"></div>Proveedor C</div>
+      </div>
+
+      <div id="map"></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  /* ══════════════════════════════════════════════════
+     OSRM — servidor público, sin API key, sin CORS
+  ══════════════════════════════════════════════════ */
+
+  /* ══════════════════════════════════════════════════
+     ESTADO Y CONSTANTES
+  ══════════════════════════════════════════════════ */
+  const state = { map: null, markers: [], routes: [], initialized: false };
+  const COLORS = { A: '#1a55d4', B: '#c0392b', C: '#d4660a' };
+  const MEDALS = ['🥇', '🥈', '🥉'];
+
+  /* ══ MAPA ══════════════════════════════════════════ */
+  function initMap(center = [4.660, -74.070], zoom = 12) {
+    if (state.initialized) return;
+
+    // Forzar altura explícita antes de inicializar Leaflet
+    const mapEl = document.getElementById('map');
+    const wrap   = document.getElementById('mapWrap');
+    if (!mapEl.style.height || mapEl.offsetHeight < 100) {
+      mapEl.style.height = (wrap.offsetHeight > 100 ? wrap.offsetHeight : window.innerHeight - 52) + 'px';
+    }
+
+    state.map = L.map('map', { center, zoom });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19,
+    }).addTo(state.map);
+    state.initialized = true;
+    document.getElementById('emptyState').classList.add('hidden');
+
+    // Forzar re-render por si el tamaño no fue detectado correctamente
+    setTimeout(() => state.map.invalidateSize(), 100);
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    // Segundo invalidateSize por seguridad (fonts, layout tardío)
+    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 400);
+  });
+
+  window.addEventListener('resize', () => { if (state.map) state.map.invalidateSize(); });
+
+  function clearMap() {
+    state.markers.forEach(m => state.map.removeLayer(m));
+    state.routes.forEach(r => state.map.removeLayer(r));
+    state.markers = []; state.routes = [];
+  }
+
+  /* ══ ÍCONOS ════════════════════════════════════════ */
+  function makeIcon(color, label) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 34 46">
+      <path d="M17 1C8.716 1 2 7.716 2 16c0 12.5 15 29 15 29S32 28.5 32 16C32 7.716 25.284 1 17 1z"
+            fill="${color}" stroke="rgba(0,0,0,.25)" stroke-width="1"/>
+      <text x="17" y="21" text-anchor="middle" dominant-baseline="middle"
+            font-size="11" font-weight="700" font-family="monospace" fill="white">${label}</text>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [34, 46], iconAnchor: [17, 46], popupAnchor: [0, -48] });
+  }
+
+  function destIcon() {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 34 46">
+      <path d="M17 1C8.716 1 2 7.716 2 16c0 12.5 15 29 15 29S32 28.5 32 16C32 7.716 25.284 1 17 1z"
+            fill="#1a8a4a" stroke="rgba(0,0,0,.25)" stroke-width="1"/>
+      <text x="17" y="20" text-anchor="middle" dominant-baseline="middle" font-size="14" fill="white">✚</text>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [34, 46], iconAnchor: [17, 46], popupAnchor: [0, -48] });
+  }
+
+  /* ══ POPUP ═════════════════════════════════════════ */
+  function popupHtml(title, rows, color) {
+    return `<div class="popup-inner">
+      <div class="popup-name" style="color:${color}">${title}</div>
+      ${rows.map(([k,v]) => `<div class="popup-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}
+    </div>`;
+  }
+
+  /* ══ LOG ═══════════════════════════════════════════ */
+  function log(msg, type = '') {
+    const box = document.getElementById('logBox');
+    const el = document.createElement('div');
+    el.className = `status-line ${type}`;
+    el.innerHTML = `<div class="status-dot"></div>${msg}`;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ══ LOADING ═══════════════════════════════════════ */
+  function setLoading(on) {
+    const btn = document.getElementById('btnCalc');
+    btn.disabled = on;
+    btn.classList.toggle('loading', on);
+    document.getElementById('btnSpinner').style.display = on ? 'block' : 'none';
+    document.getElementById('btnLabel').textContent = on ? 'Calculando…' : 'Calcular rutas';
+  }
+
+  /* ══ LEER COORDENADAS DESDE INPUT ══════════════════
+     Devuelve { lat, lon, label } o lanza Error si es inválido.
+  ══════════════════════════════════════════════════ */
+  /* ══ DETECTAR SI EL INPUT ES COORDENADA O DIRECCIÓN ══
+     Retorna true si el valor parece un número flotante.
+  ════════════════════════════════════════════════════ */
+  function looksLikeNumber(v) {
+    return /^-?\d+([.,]\d+)?$/.test(v.trim());
+  }
+
+  /* ══ PARSEAR COORDENADAS DESDE TEXTO ══════════════════
+     Acepta: "4.6601, -74.0701" | "4.6601 -74.0701" | dos campos separados
+  ════════════════════════════════════════════════════ */
+  function parseCoordPair(latRaw, lonRaw) {
+    const norm = v => parseFloat(v.trim().replace(',', '.'));
+
+    // Caso: latRaw contiene "lat, lon" (pegaron ambas en el primer campo)
+    const combined = latRaw.trim();
+    const commaMatch = combined.match(/^(-?\d+[.,]?\d*)\s*[,;\s]\s*(-?\d+[.,]?\d*)$/);
+    if (commaMatch && lonRaw.trim() === '') {
+      return { lat: norm(commaMatch[1]), lon: norm(commaMatch[2]) };
+    }
+
+    return { lat: norm(latRaw), lon: norm(lonRaw) };
+  }
+
+  /* ══ VALIDAR RANGO DE COORDENADAS ══════════════════ */
+  function validateCoords(lat, lon, name) {
+    if (isNaN(lat) || isNaN(lon))
+      throw new Error(`${name}: coordenadas no numéricas (usa punto decimal, ej: 4.6601).`);
+    if (lat < -90 || lat > 90)
+      throw new Error(`${name}: latitud ${lat.toFixed(4)} fuera de rango (-90 a 90).`);
+    if (lon < -180 || lon > 180)
+      throw new Error(`${name}: longitud ${lon.toFixed(4)} fuera de rango (-180 a 180).`);
+    // Advertir si está muy lejos de Colombia
+    if (lat < -5 || lat > 14 || lon < -82 || lon > -65)
+      log(`⚠️ ${name}: coordenadas fuera de Colombia — ¿es correcto?`, 'info');
+  }
+
+  /* ══ GEOCODIFICACIÓN — Nominatim (OSM, gratis, sin key) ══
+     Busca primero en Bogotá; si falla amplía a Colombia.
+  ════════════════════════════════════════════════════════ */
+  async function geocodeAddress(address, name) {
+    // Intentar primero con ", Bogotá, Colombia" para mayor precisión
+    const queries = [
+      `${address}, Bogotá, Colombia`,
+      `${address}, Colombia`,
+    ];
+
+    for (const q of queries) {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=co`;
+      let res;
+      try {
+        res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      } catch (e) {
+        throw new Error(`${name}: error de red en geocodificación.`);
+      }
+
+      if (!res.ok) throw new Error(`${name}: Nominatim respondió ${res.status}.`);
+
+      const data = await res.json();
+      if (data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        const label = data[0].display_name.split(',').slice(0, 3).join(',').trim();
+        log(`✓ ${name}: "${label}"`, 'ok');
+        return { lat, lon, label };
+      }
+    }
+
+    throw new Error(`${name}: no se encontró la dirección "${address}" en Colombia. Verifica o usa coordenadas.`);
+  }
+
+  /* ══ RESOLVER INPUT — COORDENADAS O DIRECCIÓN ══════
+     Si el primer campo parece número → coordenadas directas.
+     Si no → geocodificar como dirección.
+     También acepta "lat, lon" pegado en el primer campo.
+  ════════════════════════════════════════════════════ */
+  async function resolveInput(latId, lonId, name) {
+    const latEl = document.getElementById(latId);
+    const lonEl = document.getElementById(lonId);
+    const latRaw = latEl.value.trim();
+    const lonRaw = lonEl.value.trim();
+
+    if (!latRaw) throw new Error(`${name}: el campo está vacío.`);
+
+    // ¿Parece coordenada numérica?
+    if (looksLikeNumber(latRaw)) {
+      // Puede que lonRaw también sea número, o que el user pegó "lat, lon" en latRaw
+      const { lat, lon } = parseCoordPair(latRaw, lonRaw);
+      validateCoords(lat, lon, name);
+      log(`✓ ${name}: coordenadas ${lat.toFixed(5)}, ${lon.toFixed(5)}`, 'ok');
+      return { lat, lon, label: `${lat.toFixed(5)}, ${lon.toFixed(5)}` };
+    }
+
+    // ¿El usuario pegó "lat, lon" en el primer campo como texto?
+    const combinedNum = latRaw.match(/^(-?\d+[.,]\d+)\s*[,;]\s*(-?\d+[.,]\d+)$/);
+    if (combinedNum) {
+      const lat = parseFloat(combinedNum[1].replace(',', '.'));
+      const lon = parseFloat(combinedNum[2].replace(',', '.'));
+      validateCoords(lat, lon, name);
+      log(`✓ ${name}: coordenadas ${lat.toFixed(5)}, ${lon.toFixed(5)}`, 'ok');
+      return { lat, lon, label: `${lat.toFixed(5)}, ${lon.toFixed(5)}` };
+    }
+
+    // Tratar como dirección de texto → geocodificar
+    log(`🔍 Geocodificando ${name}: "${latRaw}"…`, 'info');
+    return await geocodeAddress(latRaw, name);
+  }
+
+  /* ══ RUTA — OSRM público (sin API key, sin CORS) ═══
+     Funciona abierto desde file:// sin configuración.
+  ════════════════════════════════════════════════════ */
+  async function getRoute(origin, dest) {
+    const path = `${origin.lon},${origin.lat};${dest.lon},${dest.lat}`;
+    const url  = `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`;
+
+    log(`  OSRM → [${origin.lon.toFixed(4)}, ${origin.lat.toFixed(4)}] → [${dest.lon.toFixed(4)}, ${dest.lat.toFixed(4)}]`, '');
+
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (networkErr) {
+      throw new Error(`Error de red al contactar OSRM: ${networkErr.message}`);
+    }
+
+    const rawText = await res.text();
+    log(`  OSRM HTTP ${res.status}`, res.ok ? '' : 'err');
+
+    if (!res.ok) {
+      throw new Error(`OSRM ${res.status}: ${rawText.slice(0, 120)}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (_) {
+      throw new Error(`OSRM devolvió JSON inválido: ${rawText.slice(0, 80)}`);
+    }
+
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
+      throw new Error(`OSRM: ${data.message || data.code || 'Sin ruta encontrada'}`);
+    }
+
+    const route = data.routes[0];
+    const coords = route.geometry.coordinates.map(c => [c[1], c[0]]); // [lat,lon] para Leaflet
+    return {
+      durationMin: route.duration / 60,
+      distanceKm:  route.distance / 1000,
+      coords,
+    };
+  }
+
+  /* ══ VALIDACIÓN ════════════════════════════════════ */
+  function validate() {
+    // Solo el campo "lat" (primero) es obligatorio; "lon" es opcional si se ingresa dirección
+    const primaryIds = ['latDest', 'latA', 'latB', 'latC'];
+    let ok = true;
+    primaryIds.forEach(id => {
+      const el = document.getElementById(id);
+      const empty = el.value.trim() === '';
+      el.classList.toggle('invalid', empty);
+      el.classList.toggle('validated', !empty);
+      if (empty) ok = false;
+    });
+    return ok;
+  }
+
+  document.querySelectorAll('input').forEach(inp =>
+    inp.addEventListener('input', () => inp.classList.remove('invalid', 'validated'))
+  );
+
+  /* ══ MAIN — CALCULAR RUTAS ════════════════════════ */
+  async function calcularRutas() {
+    if (!validate()) { log('Completa todos los campos de coordenadas.', 'err'); return; }
+
+    setLoading(true);
+    document.getElementById('resultsBlock').style.display = 'none';
+    document.getElementById('logBox').innerHTML = '';
+    log('Resolviendo ubicaciones…', 'info');
+
+    initMap();
+    clearMap();
+
+    const providers = [
+      { id: 'A', label: 'Proveedor A', latId: 'latA', lonId: 'lonA' },
+      { id: 'B', label: 'Proveedor B', latId: 'latB', lonId: 'lonB' },
+      { id: 'C', label: 'Proveedor C', latId: 'latC', lonId: 'lonC' },
+    ];
+
+    try {
+      // 1. Leer coordenadas directamente
+      const dest = await resolveInput('latDest', 'lonDest', 'Destino');
+      log(`✓ Destino: ${dest.label}`, 'ok');
+
+      const origins = {};
+      for (const p of providers) {
+        origins[p.id] = await resolveInput(p.latId, p.lonId, p.label);
+        log(`✓ ${p.label}: ${origins[p.id].label}`, 'ok');
+      }
+
+      // 2. Marcador destino
+      state.markers.push(
+        L.marker([dest.lat, dest.lon], { icon: destIcon() })
+          .addTo(state.map)
+          .bindPopup(popupHtml('🏪 Destino', [['Coords', dest.label]], '#1a8a4a'))
+      );
+
+      // 3. Rutas
+      const results = [];
+      for (const p of providers) {
+        const orig = origins[p.id];
+        log(`Calculando ruta ${p.label}…`, 'info');
+        try {
+          const route = await getRoute(orig, dest);
+
+          state.routes.push(
+            L.polyline(route.coords, { color: COLORS[p.id], weight: 4.5, opacity: .82 })
+              .addTo(state.map)
+          );
+          state.markers.push(
+            L.marker([orig.lat, orig.lon], { icon: makeIcon(COLORS[p.id], p.id) })
+              .addTo(state.map)
+              .bindPopup(popupHtml(p.label, [
+                ['Coords',      orig.label],
+                ['Tiempo est.', `${route.durationMin.toFixed(1)} min`],
+                ['Distancia',   `${route.distanceKm.toFixed(2)} km`],
+              ], COLORS[p.id]))
+          );
+
+          results.push({ ...p, color: COLORS[p.id], duration: route.durationMin, distance: route.distanceKm, ok: true });
+          log(`${p.label} → ${route.durationMin.toFixed(1)} min / ${route.distanceKm.toFixed(2)} km`, 'ok');
+
+        } catch (e) {
+          log(`${p.label} — error: ${e.message}`, 'err');
+          results.push({ ...p, color: COLORS[p.id], ok: false });
+        }
+      }
+
+      // 4. Ajustar mapa
+      state.map.invalidateSize();
+      state.map.fitBounds([
+        [dest.lat, dest.lon],
+        ...Object.values(origins).map(o => [o.lat, o.lon]),
+      ], { padding: [32, 32] });
+
+      document.getElementById('mapLegend').classList.add('visible');
+
+      // 5. Resultados
+      const sorted = results.filter(r => r.ok).sort((a, b) => a.duration - b.duration);
+      renderResults(sorted, results.filter(r => !r.ok));
+      log('═══ Proceso completado ═══', 'ok');
+
+    } catch (err) {
+      log(`Error: ${err.message}`, 'err');
+    }
+
+    setLoading(false);
+  }
+
+  /* ══ RENDERIZAR RESULTADOS ════════════════════════ */
+  function renderResults(sorted, failed) {
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = '';
+
+    sorted.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      if (i === 0) tr.classList.add('best');
+      tr.innerHTML = `
+        <td><span class="rank-medal">${MEDALS[i]}</span></td>
+        <td><span class="prov-badge"><span class="prov-pip" style="background:${r.color}"></span>${r.label}</span></td>
+        <td><strong>${r.duration.toFixed(1)}</strong> min</td>
+        <td>${r.distance.toFixed(2)} km</td>`;
+      tbody.appendChild(tr);
+    });
+
+    failed.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>—</td>
+        <td><span class="prov-badge"><span class="prov-pip" style="background:${r.color}"></span>${r.label}</span></td>
+        <td colspan="2" style="color:var(--cB);font-size:.65rem">Error al calcular ruta</td>`;
+      tbody.appendChild(tr);
+    });
+
+    if (sorted.length > 0) {
+      const best = sorted[0], second = sorted[1];
+      const diffTxt = second
+        ? `, <strong>${(second.duration - best.duration).toFixed(1)} min</strong> más rápido que el siguiente`
+        : '';
+      document.getElementById('recBox').innerHTML = `
+        <div class="rec-box-title"> Proveedor recomendado: ${best.label}</div>
+        <div class="rec-box-body">
+          Tiempo estimado: <strong>${best.duration.toFixed(1)} min</strong> /
+          Distancia: <strong>${best.distance.toFixed(2)} km</strong>${diffTxt}.
+          Es la opción con menor tiempo de entrega al destino.
+        </div>`;
+    }
+
+    document.getElementById('resultsBlock').style.display = 'block';
+  }
+</script>
+</body>
+</html>
