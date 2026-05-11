@@ -217,7 +217,6 @@
 
     .prov-badge { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: .7rem; }
     .prov-pip { width: 8px; height: 8px; border-radius: 50%; }
-    .rank-medal { font-size: .9rem; margin-right: 2px; }
 
     /* ── REC BOX ── */
     .rec-box {
@@ -352,7 +351,7 @@
       RouteIQ
       <span class="logo-tag">Logística</span>
     </div>
-    <div class="header-version">v4.0 · Geocodificación</div>
+    <div class="header-version">v5.0 · TomTom Traffic</div>
   </header>
 
   <main>
@@ -425,7 +424,7 @@
         <table class="results-table">
           <thead>
             <tr>
-              <th>#</th><th>Proveedor</th><th>Tiempo</th><th>Distancia</th>
+              <th>#</th><th>Proveedor</th><th>Tiempo real</th><th>Distancia</th>
             </tr>
           </thead>
           <tbody id="resultsBody"></tbody>
@@ -439,7 +438,7 @@
         <div id="logBox">
           <div class="status-line info">
             <div class="status-dot"></div>
-            Sistema listo. Ingresa las coordenadas y haz clic en Calcular rutas.
+            Sistema listo · TomTom Traffic activo. Ingresa las ubicaciones y haz clic en Calcular rutas.
           </div>
         </div>
       </div>
@@ -467,15 +466,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
   /* ══════════════════════════════════════════════════
-     OSRM — servidor público, sin API key, sin CORS
+     TOMTOM — Routing + Geocoding + Traffic en tiempo real
   ══════════════════════════════════════════════════ */
+  const TT_KEY = 'AU5G8f3dhKZbEuLVm47hUhSwnwQaslEX';
 
   /* ══════════════════════════════════════════════════
      ESTADO Y CONSTANTES
   ══════════════════════════════════════════════════ */
   const state = { map: null, markers: [], routes: [], initialized: false };
   const COLORS = { A: '#1a55d4', B: '#c0392b', C: '#d4660a' };
-  const MEDALS = ['🥇', '🥈', '🥉'];
 
   /* ══ MAPA ══════════════════════════════════════════ */
   function initMap(center = [4.660, -74.070], zoom = 12) {
@@ -599,32 +598,35 @@
       log(`⚠️ ${name}: coordenadas fuera de Colombia — ¿es correcto?`, 'info');
   }
 
-  /* ══ GEOCODIFICACIÓN — Nominatim (OSM, gratis, sin key) ══
-     Busca primero en Bogotá; si falla amplía a Colombia.
-  ════════════════════════════════════════════════════════ */
+  /* ══ GEOCODIFICACIÓN — TomTom Search API ══════════
+     Mucho más precisa que Nominatim para Bogotá.
+  ════════════════════════════════════════════════════ */
   async function geocodeAddress(address, name) {
-    // Intentar primero con ", Bogotá, Colombia" para mayor precisión
     const queries = [
       `${address}, Bogotá, Colombia`,
       `${address}, Colombia`,
     ];
 
     for (const q of queries) {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=co`;
+      const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?key=${TT_KEY}&countrySet=CO&limit=1&typeahead=false`;
       let res;
       try {
-        res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+        res = await fetch(url);
       } catch (e) {
-        throw new Error(`${name}: error de red en geocodificación.`);
+        throw new Error(`${name}: error de red en geocodificación TomTom.`);
       }
 
-      if (!res.ok) throw new Error(`${name}: Nominatim respondió ${res.status}.`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`${name}: TomTom Geocoding respondió ${res.status} — ${txt.slice(0,80)}`);
+      }
 
       const data = await res.json();
-      if (data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
-        const label = data[0].display_name.split(',').slice(0, 3).join(',').trim();
+      if (data.results && data.results.length > 0) {
+        const r = data.results[0];
+        const lat = r.position.lat;
+        const lon = r.position.lon;
+        const label = (r.address && r.address.freeformAddress) || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
         log(`✓ ${name}: "${label}"`, 'ok');
         return { lat, lon, label };
       }
@@ -670,46 +672,65 @@
     return await geocodeAddress(latRaw, name);
   }
 
-  /* ══ RUTA — OSRM público (sin API key, sin CORS) ═══
-     Funciona abierto desde file:// sin configuración.
+  /* ══ RUTA CON TRÁFICO — TomTom Routing API ═════════
+     traffic=true → tiempos con tráfico en tiempo real
   ════════════════════════════════════════════════════ */
   async function getRoute(origin, dest) {
-    const path = `${origin.lon},${origin.lat};${dest.lon},${dest.lat}`;
-    const url  = `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`;
+    const coords = `${origin.lat},${origin.lon}:${dest.lat},${dest.lon}`;
+    const url = `https://api.tomtom.com/routing/1/calculateRoute/${coords}/json?key=${TT_KEY}&travelMode=car&routeType=fastest&traffic=true`;
 
-    log(`  OSRM → [${origin.lon.toFixed(4)}, ${origin.lat.toFixed(4)}] → [${dest.lon.toFixed(4)}, ${dest.lat.toFixed(4)}]`, '');
+    log(`  TomTom Routing (tráfico real) → [${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)}] → [${dest.lat.toFixed(4)}, ${dest.lon.toFixed(4)}]`, '');
 
     let res;
     try {
       res = await fetch(url);
     } catch (networkErr) {
-      throw new Error(`Error de red al contactar OSRM: ${networkErr.message}`);
+      throw new Error(`Error de red al contactar TomTom Routing: ${networkErr.message}`);
     }
 
     const rawText = await res.text();
-    log(`  OSRM HTTP ${res.status}`, res.ok ? '' : 'err');
+    log(`  TomTom HTTP ${res.status}`, res.ok ? '' : 'err');
 
     if (!res.ok) {
-      throw new Error(`OSRM ${res.status}: ${rawText.slice(0, 120)}`);
+      throw new Error(`TomTom Routing ${res.status}: ${rawText.slice(0, 120)}`);
     }
 
     let data;
     try {
       data = JSON.parse(rawText);
     } catch (_) {
-      throw new Error(`OSRM devolvió JSON inválido: ${rawText.slice(0, 80)}`);
+      throw new Error(`TomTom devolvió JSON inválido: ${rawText.slice(0, 80)}`);
     }
 
-    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
-      throw new Error(`OSRM: ${data.message || data.code || 'Sin ruta encontrada'}`);
+    if (!data.routes || !data.routes[0]) {
+      throw new Error(`TomTom: sin ruta encontrada.`);
     }
 
     const route = data.routes[0];
-    const coords = route.geometry.coordinates.map(c => [c[1], c[0]]); // [lat,lon] para Leaflet
+    const summary = route.summary;
+
+    const durationMin = summary.travelTimeInSeconds / 60;
+    const noTrafficSecs = summary.noTrafficTravelTimeInSeconds
+      || summary.historicTrafficTravelTimeInSeconds
+      || summary.travelTimeInSeconds;
+    const noTrafficMin = noTrafficSecs / 60;
+    const delayMin = Math.max(0, durationMin - noTrafficMin);
+    const distanceKm = summary.lengthInMeters / 1000;
+
+    let trafficLevel = 'low';
+    const delayPct = noTrafficMin > 0 ? delayMin / noTrafficMin : 0;
+    if (delayPct > 0.3) trafficLevel = 'high';
+    else if (delayPct > 0.1) trafficLevel = 'medium';
+
+    const coords_map = route.legs[0].points.map(p => [p.latitude, p.longitude]);
+
     return {
-      durationMin: route.duration / 60,
-      distanceKm:  route.distance / 1000,
-      coords,
+      durationMin,
+      noTrafficMin,
+      delayMin,
+      distanceKm,
+      trafficLevel,
+      coords: coords_map,
     };
   }
 
@@ -739,7 +760,7 @@
     setLoading(true);
     document.getElementById('resultsBlock').style.display = 'none';
     document.getElementById('logBox').innerHTML = '';
-    log('Resolviendo ubicaciones…', 'info');
+    log('Resolviendo ubicaciones con TomTom…', 'info');
 
     initMap();
     clearMap();
@@ -776,6 +797,11 @@
         try {
           const route = await getRoute(orig, dest);
 
+          const trafficLabels = { low: '🟢 Fluido', medium: '🟡 Moderado', high: '🔴 Congestionado' };
+          const delayTxt = route.delayMin > 0.5
+            ? `+${route.delayMin.toFixed(0)} min por tráfico`
+            : 'Sin demora significativa';
+
           state.routes.push(
             L.polyline(route.coords, { color: COLORS[p.id], weight: 4.5, opacity: .82 })
               .addTo(state.map)
@@ -784,14 +810,17 @@
             L.marker([orig.lat, orig.lon], { icon: makeIcon(COLORS[p.id], p.id) })
               .addTo(state.map)
               .bindPopup(popupHtml(p.label, [
-                ['Coords',      orig.label],
-                ['Tiempo est.', `${route.durationMin.toFixed(1)} min`],
-                ['Distancia',   `${route.distanceKm.toFixed(2)} km`],
+                ['Coords',        orig.label],
+                ['Tiempo real',   `${route.durationMin.toFixed(1)} min`],
+                ['Sin tráfico',   `${route.noTrafficMin.toFixed(1)} min`],
+                ['Demora',        delayTxt],
+                ['Tráfico',       trafficLabels[route.trafficLevel]],
+                ['Distancia',     `${route.distanceKm.toFixed(2)} km`],
               ], COLORS[p.id]))
           );
 
-          results.push({ ...p, color: COLORS[p.id], duration: route.durationMin, distance: route.distanceKm, ok: true });
-          log(`${p.label} → ${route.durationMin.toFixed(1)} min / ${route.distanceKm.toFixed(2)} km`, 'ok');
+          results.push({ ...p, color: COLORS[p.id], duration: route.durationMin, noTrafficDuration: route.noTrafficMin, delayMin: route.delayMin, distance: route.distanceKm, trafficLevel: route.trafficLevel, ok: true });
+          log(`${p.label} → ${route.durationMin.toFixed(1)} min (tráfico real) / ${route.distanceKm.toFixed(2)} km`, 'ok');
 
         } catch (e) {
           log(`${p.label} — error: ${e.message}`, 'err');
@@ -825,13 +854,16 @@
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = '';
 
+    const trafficColors = { low: '#1a8a4a', medium: '#e8a500', high: '#c0392b' };
+    const trafficEmoji  = { low: '🟢', medium: '🟡', high: '🔴' };
+
     sorted.forEach((r, i) => {
       const tr = document.createElement('tr');
       if (i === 0) tr.classList.add('best');
+      const tIcon = trafficEmoji[r.trafficLevel] || '';
       tr.innerHTML = `
-        <td><span class="rank-medal">${MEDALS[i]}</span></td>
         <td><span class="prov-badge"><span class="prov-pip" style="background:${r.color}"></span>${r.label}</span></td>
-        <td><strong>${r.duration.toFixed(1)}</strong> min</td>
+        <td><strong>${r.duration.toFixed(1)}</strong> min ${tIcon}</td>
         <td>${r.distance.toFixed(2)} km</td>`;
       tbody.appendChild(tr);
     });
@@ -850,12 +882,15 @@
       const diffTxt = second
         ? `, <strong>${(second.duration - best.duration).toFixed(1)} min</strong> más rápido que el siguiente`
         : '';
+      const delayTxt = best.delayMin > 0.5
+        ? `Demora actual por tráfico: <strong>+${best.delayMin.toFixed(0)} min</strong>.`
+        : `Tráfico fluido en esta ruta.`;
       document.getElementById('recBox').innerHTML = `
-        <div class="rec-box-title"> Proveedor recomendado: ${best.label}</div>
+        <div class="rec-box-title">Proveedor recomendado: ${best.label}</div>
         <div class="rec-box-body">
-          Tiempo estimado: <strong>${best.duration.toFixed(1)} min</strong> /
-          Distancia: <strong>${best.distance.toFixed(2)} km</strong>${diffTxt}.
-          Es la opción con menor tiempo de entrega al destino.
+          Tiempo con tráfico real: <strong>${best.duration.toFixed(1)} min</strong> /
+          Distancia: <strong>${best.distance.toFixed(2)} km</strong>${diffTxt}.<br>
+          ${delayTxt}
         </div>`;
     }
 
